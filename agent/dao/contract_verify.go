@@ -6,6 +6,7 @@ import (
 	"money/agent/model"
 	"money/agent/tools"
 	"strconv"
+	"strings"
 )
 
 type ContractVerifyResult struct {
@@ -110,6 +111,10 @@ func VerifyContract(tx *model.BSCTransaction) (scores []*model.ContractVerifySco
 	return
 }
 
+func contractEqual(contract1, contract2 string) bool {
+	return strings.ToLower(contract1) == strings.ToLower(contract2)
+}
+
 func AnalysisContract(contract string, verify *ContractVerifyResult) (score *model.ContractVerifyScore, err error) {
 	// 数据无返回
 	if verify.Message != "OK" || len(verify.Result) == 0 {
@@ -120,7 +125,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 	// 获取验证数据
 	var result *ContractVerify
 	for key, value := range verify.Result {
-		if key == contract && value != nil {
+		if contractEqual(key, contract) && value != nil {
 			result = value
 			break
 		}
