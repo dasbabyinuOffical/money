@@ -70,29 +70,59 @@ type ContractVerify struct {
 	TokenSymbol          string      `json:"token_symbol"`
 }
 
-func VerifyContract(tx *model.BSCTransaction) (score *model.ContractVerifyScore, err error) {
-	contract := tx.MakerContract
-	if IsStableCoin(tx.MakerContract) {
+func VerifyContract(tx *model.BSCTransaction) (scores []*model.ContractVerifyScore, err error) {
+	if !IsStableCoin(tx.MakerContract) {
+		contract := tx.MakerContract
+		score := new(model.ContractVerifyScore)
+		score, err = GetContractVerifyScore(contract)
+		if err != nil || score.ID > 0 {
+			return
+		}
+
+		url := ContractVerifyUrlPrefix + contract
+		data, err := tools.HttpGet(url)
+		if err != nil {
+			return nil, err
+		}
+
+		var result = new(ContractVerifyResult)
+		err = json.Unmarshal(data, result)
+		if err != nil {
+			return nil, err
+		}
+		score, err = AnalysisContract(contract, result)
+		if err != nil {
+			return nil, err
+		}
 		contract = tx.TakerContract
+		scores = append(scores, score)
 	}
+	if !IsStableCoin(tx.TakerContract) {
+		contract := tx.TakerContract
+		score := new(model.ContractVerifyScore)
+		score, err = GetContractVerifyScore(contract)
+		if err != nil || score.ID > 0 {
+			return
+		}
 
-	score, err = GetContractVerifyScore(contract)
-	if err != nil || score.ID > 0 {
-		return
-	}
+		url := ContractVerifyUrlPrefix + contract
+		data, err := tools.HttpGet(url)
+		if err != nil {
+			return nil, err
+		}
 
-	url := ContractVerifyUrlPrefix + contract
-	data, err := tools.HttpGet(url)
-	if err != nil {
-		return
+		var result = new(ContractVerifyResult)
+		err = json.Unmarshal(data, result)
+		if err != nil {
+			return nil, err
+		}
+		score, err = AnalysisContract(contract, result)
+		if err != nil {
+			return nil, err
+		}
+		contract = tx.TakerContract
+		scores = append(scores, score)
 	}
-
-	var result = new(ContractVerifyResult)
-	err = json.Unmarshal(data, result)
-	if err != nil {
-		return
-	}
-	score, err = AnalysisContract(contract, result)
 	return
 }
 

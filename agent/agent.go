@@ -114,13 +114,17 @@ func (agent *Agent) ScanLog() (err error) {
 		}
 
 		// 分析交易，验证合约安全性
-		score, err := dao.VerifyContract(record)
+		scores, err := dao.VerifyContract(record)
 		if err != nil {
 			fmt.Println("合约不安全:", record.TxId)
 			continue
 		}
-		if score.Security == false {
-			fmt.Println("合约不安全，跳过:", record.TxId)
+		security := true
+		for _, score := range scores {
+			security = security && score.Security
+		}
+		if security == false {
+			fmt.Println("合约不安全,跳过:", record.TxId)
 			continue
 		}
 
@@ -137,6 +141,7 @@ func (agent *Agent) ScanLog() (err error) {
 			continue
 		}
 		record.MakerSymbol = makerPriceInfo.Data.Symbol
+		record.MakerPrice, _ = strconv.ParseFloat(makerPriceInfo.Data.Price, 10)
 
 		var takerPriceInfo ContractPrice
 		data, err = tools.HttpGet(PancakeV2Route + record.TakerContract)
@@ -150,12 +155,15 @@ func (agent *Agent) ScanLog() (err error) {
 			continue
 		}
 		record.TakerSymbol = takerPriceInfo.Data.Symbol
+		record.TakerPrice, _ = strconv.ParseFloat(takerPriceInfo.Data.Price, 10)
 
 		// 保存合约
-		err = dao.SaveContractVerifyScore(score)
-		if err != nil {
-			fmt.Println(" 保存验证合约失败：", score.Contract)
-			continue
+		for _, score := range scores {
+			err = dao.SaveContractVerifyScore(score)
+			if err != nil {
+				fmt.Println(" 保存验证合约失败：", score.Contract)
+				continue
+			}
 		}
 
 		// 保存交易记录

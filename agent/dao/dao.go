@@ -45,17 +45,17 @@ func SaveBscTransaction(tx *model.BSCTransaction) (err error) {
 }
 
 func TransferToBscHotCoin(tx *model.BSCTransaction) (hotCoins []*model.HotCoin, err error) {
-	today := time.Now()
-	year, month, day, hour := today.Year(), today.Month(), today.Day(), today.Hour()
+	txTime := tx.TxTime
+	year, month, day, hour := txTime.Year(), txTime.Month(), txTime.Day(), txTime.Hour()
 
 	if !IsStableCoin(tx.MakerContract) {
 		hotCoin := new(model.HotCoin)
 		hotCoin.Day = time.Date(year, month, day, hour, 0, 0, 0, time.Local)
-		oldTx := new(model.HotCoin)
-		DB().Where("contract = ? and day = ?", tx.MakerContract, hotCoin.Day).First(oldTx)
+		oldHotCoin := new(model.HotCoin)
+		DB().Where("contract = ? and day = ?", tx.MakerContract, hotCoin.Day).First(oldHotCoin)
 		hotCoin.Symbol = tx.MakerSymbol
 		hotCoin.Contract = tx.MakerContract
-		hotCoin.TxCount = oldTx.TxCount + 1
+		hotCoin.TxCount = oldHotCoin.TxCount + 1
 		hotCoin.Price = tx.MakerPrice
 		hotCoins = append(hotCoins, hotCoin)
 	}
@@ -63,11 +63,11 @@ func TransferToBscHotCoin(tx *model.BSCTransaction) (hotCoins []*model.HotCoin, 
 	if !IsStableCoin(tx.TakerContract) {
 		hotCoin := new(model.HotCoin)
 		hotCoin.Day = time.Date(year, month, day, hour, 0, 0, 0, time.Local)
-		oldTx := new(model.HotCoin)
-		DB().Where("contract = ? and day = ?", tx.TakerContract, hotCoin.Day).First(oldTx)
+		oldHotCoin := new(model.HotCoin)
+		DB().Where("contract = ? and day = ?", tx.TakerContract, hotCoin.Day).First(oldHotCoin)
 		hotCoin.Symbol = tx.TakerSymbol
 		hotCoin.Contract = tx.TakerContract
-		hotCoin.TxCount = oldTx.TxCount + 1
+		hotCoin.TxCount = oldHotCoin.TxCount + 1
 		hotCoin.Price = tx.TakerPrice
 		hotCoins = append(hotCoins, hotCoin)
 	}
@@ -92,11 +92,10 @@ func GetBscLatestTransactionFromDB() (txList []*model.BSCTransaction, err error)
 }
 
 func GetBscHotTransactionFromDB() (hotCoinList []*model.HotCoin, err error) {
-	today := time.Now().Add(-24 * time.Hour).Format("2006-01-02")
-	err = DB().Model(new(model.HotCoin)).Joins("inner join contract_verify_score on hot_coin.contract = contract_verify_score.contract").
-		Where("hot_coin.day >= ?", today).
-		Order("contract_verify_score.score desc,hot_coin.tx_count desc").
-		Limit(100).Find(&hotCoinList).Error
+	err = DB().
+		Where("updated_at >= ?", time.Now().Add(-24*time.Hour)).
+		Order("tx_count desc,updated_at desc").
+		Find(&hotCoinList).Error
 	return
 }
 
