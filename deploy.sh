@@ -1,0 +1,1 @@
+GOOS=linux  GOARCH="amd64" go build -o money && scp money root@159.138.63.144:/tmp/
