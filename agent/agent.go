@@ -2,8 +2,8 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"log"
 	"math/big"
@@ -17,16 +17,27 @@ import (
 )
 
 const (
-	BscRpcUrl     = "https://bsc-dataseed1.binance.org"
-	BscScanUrl    = "https://api.bscscan.com/api"
-	BscScanAPIKEY = "FT1ZFNFUJV1GRDKZQB4FXDUYZD31CVAIWE"
-	Swap          = "Swap (index_topic_1 address sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)"
+	BscRpcUrl      = "https://bsc-dataseed1.binance.org"
+	BscScanUrl     = "https://api.bscscan.com/api"
+	BscScanAPIKEY  = "FT1ZFNFUJV1GRDKZQB4FXDUYZD31CVAIWE"
+	Swap           = "Swap (index_topic_1 address sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)"
+	PancakeV2Route = "https://api.pancakeswap.info/api/v2/tokens/"
 )
 
 type Agent struct {
 	PancakeV2Caller *pancakev2.Pancakev2Caller
 	PancakeV2ABI    string
 	BscClient       *ethclient.Client
+}
+
+type ContractPrice struct {
+	UpdatedAt int64 `json:"updated_at"`
+	Data      struct {
+		Name     string `json:"name"`
+		Symbol   string `json:"symbol"`
+		Price    string `json:"price"`
+		PriceBNB string `json:"price_BNB"`
+	} `json:"data"`
 }
 
 func NewAgent() (agent *Agent, err error) {
@@ -85,22 +96,60 @@ func (agent *Agent) ScanLog() (err error) {
 		return
 	}
 	for _, result := range txRecord.Result {
+		// 交易错误或者挂起交易，进行跳过
+		if result.IsError != "0" || result.TxreceiptStatus != "1" {
+			fmt.Println(result.Hash, ":交易记录错误或者receipt状态错误")
+			continue
+		}
 		record, err := agent.AnalysisTxRecord(result)
 		if err != nil {
 			fmt.Println(record, err)
 			continue
 		}
 
+		// 如果买入卖出都是稳定币,则跳过不需要统计
+		if dao.IsStableCoin(record.MakerContract) && dao.IsStableCoin(record.TakerContract) {
+			fmt.Println("稳定币交易跳过")
+			continue
+		}
+
 		// 分析交易，验证合约安全性
 		score, err := dao.VerifyContract(record)
 		if err != nil {
-			fmt.Println("合约无法验证:", record.TxId)
+			fmt.Println("合约不安全:", record.TxId)
 			continue
 		}
 		if score.Security == false {
 			fmt.Println("合约不安全，跳过:", record.TxId)
 			continue
 		}
+
+		// 获取合约价格和symbol信息
+		var makerPriceInfo ContractPrice
+		data, err := tools.HttpGet(PancakeV2Route + record.MakerContract)
+		if err != nil {
+			fmt.Println("获取合约价格失败," + record.MakerContract)
+			continue
+		}
+		err = json.Unmarshal(data, &makerPriceInfo)
+		if err != nil {
+			fmt.Println("合约价格反序列化失败," + record.MakerContract)
+			continue
+		}
+		record.MakerSymbol = makerPriceInfo.Data.Symbol
+
+		var takerPriceInfo ContractPrice
+		data, err = tools.HttpGet(PancakeV2Route + record.TakerContract)
+		if err != nil {
+			fmt.Println("获取合约价格失败," + record.TakerContract)
+			continue
+		}
+		err = json.Unmarshal(data, &takerPriceInfo)
+		if err != nil {
+			fmt.Println("合约价格反序列化失败," + record.TakerContract)
+			continue
+		}
+		record.TakerSymbol = takerPriceInfo.Data.Symbol
 
 		// 保存合约
 		err = dao.SaveContractVerifyScore(score)
@@ -117,37 +166,24 @@ func (agent *Agent) ScanLog() (err error) {
 		}
 
 		// 保存热门币合约
-		err = dao.SaveBsHotCoin(record)
+		hotCoins, err := dao.TransferToBscHotCoin(record)
 		if err != nil {
-			fmt.Println("热门币保存失败:", record.TxId)
+			fmt.Println("热门币获取失败:", record.TxId)
 			continue
+		}
+		for _, hotCoin := range hotCoins {
+			dao.SaveHotCoin(hotCoin)
 		}
 	}
 	// 更新合约扫描区块编号
 	addressBlock.Block = blockNumberOnChain.Int64()
-	dao.SaveAddressBlock(addressBlock)
+	err = dao.SaveAddressBlock(addressBlock)
 	return
 }
 
 // 处理区块日志
-func (agent *Agent) AnalysisTxRecord(txRecord *Result) (bscTxResult *model.BSCTransaction, err error) {
-	// 交易错误或者挂起交易，进行跳过
-	if txRecord.IsError != "0" || txRecord.TxreceiptStatus != "1" {
-		return
-	}
-
-	// 获取交易日志
-	receipt, err := agent.BscClient.TransactionReceipt(context.Background(), common.HexToHash(txRecord.Hash))
-	if err != nil {
-		return
-	}
-	var logData []byte
-	for _, log := range receipt.Logs {
-		method := log.Topics[0].Hex()
-		if tools.SignABI(method) == Swap {
-			logData = log.Data
-		}
-	}
+func (agent *Agent) AnalysisTxRecord(txRecord *Result) (bscTx *model.BSCTransaction, err error) {
+	bscTx = new(model.BSCTransaction)
 
 	// 解析交易输入和输出
 	decoder, err := NewBscInputDecoder(txRecord.FunctionName)
@@ -155,7 +191,7 @@ func (agent *Agent) AnalysisTxRecord(txRecord *Result) (bscTxResult *model.BSCTr
 		return
 	}
 
-	inputTx, err := decoder.DecodeInput(txRecord.Input, logData)
+	inputTx, err := decoder.DecodeInput(txRecord.Input)
 	if err != nil {
 		return
 	}
@@ -168,7 +204,7 @@ func (agent *Agent) AnalysisTxRecord(txRecord *Result) (bscTxResult *model.BSCTr
 	day := txTime.Format("2006-01-02")
 
 	// 从数据库获取交易对
-	bscTx, err := dao.GetBscTransaction(inputTx.MakerContract, inputTx.TakerContract, day)
+	bscTx, err = dao.GetBscTransaction(inputTx.MakerContract, inputTx.TakerContract, day)
 	if err != nil {
 		return
 	}

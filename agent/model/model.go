@@ -27,8 +27,10 @@ type BSCTransaction struct {
 	TxTime        time.Time      `gorm:"column:tx_time" json:"txTime"`
 	MakerSymbol   string         `gorm:"column:maker_symbol" json:"makerSymbol"`
 	MakerContract string         `gorm:"column:maker_contract" json:"makerContract"`
+	MakerPrice    float64        `gorm:"column:maker_price" json:"makerPrice"`
 	TakerSymbol   string         `gorm:"column:taker_symbol" json:"takerSymbol"`
 	TakerContract string         `gorm:"column:taker_contract" json:"takerContract"`
+	TakerPrice    float64        `gorm:"column:taker_price" json:"takerPrice"`
 	Status        uint8          `gorm:"column:status" json:"status"`
 	Day           string         `gorm:"column:day" json:"day"`
 	TxCount       uint64         `gorm:"column:tx_count" json:"txCount"`
@@ -50,8 +52,8 @@ type HotCoin struct {
 	Price       float64        `gorm:"column:price" json:"price"`
 	PriceSymbol string         `gorm:"column:price_symbol" json:"priceSymbol"`
 	TxCount     uint64         `gorm:"column:tx_count" json:"txCount"`
-	MarketCap   uint64         `gorm:"column:market_cap" json:"market_cap"`
 	HolderCount int64          `gorm:"column:holder_count" json:"holder_count"`
+	MarketCap   uint64         `gorm:"column:market_cap" json:"market_cap"`
 	Day         time.Time      `gorm:"column:day" json:"day"`
 }
 
@@ -68,7 +70,6 @@ type ContractVerifyScore struct {
 	TokenSymbol string         `gorm:"column:token_symbol" json:"token_symbol"`
 	Contract    string         `gorm:"column:contract" json:"contract"`
 	TotalSupply float64        `gorm:"column:total_supply" json:"total_supply"`
-	Decimal     int64          `gorm:"column:decimal" json:"decimal"`
 
 	// 创建人信息
 	CreatorAddress string  `gorm:"column:creator_address" json:"creator_address"`

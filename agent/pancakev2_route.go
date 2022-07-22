@@ -22,7 +22,7 @@ type InputTx struct {
 	TakerContract string
 }
 type Decoder interface {
-	DecodeInput(input string, logData []byte) (inputTx *InputTx, err error)
+	DecodeInput(input string) (inputTx *InputTx, err error)
 }
 
 type SwapExactETHForTokensDecoder struct {
@@ -45,7 +45,7 @@ func NewBscInputDecoder(funcName string) (decoder Decoder, err error) {
 	return
 }
 
-func (decoder *SwapExactETHForTokensDecoder) DecodeInput(input string, logData []byte) (inputTx *InputTx, err error) {
+func (decoder *SwapExactETHForTokensDecoder) DecodeInput(input string) (inputTx *InputTx, err error) {
 	inputTx = new(InputTx)
 	abiContent := contracts.GetPancakeV2ABI()
 	abi, err := abi.JSON(strings.NewReader(abiContent))

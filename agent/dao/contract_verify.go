@@ -71,13 +71,8 @@ type ContractVerify struct {
 }
 
 func VerifyContract(tx *model.BSCTransaction) (score *model.ContractVerifyScore, err error) {
-	// 如果买入卖出都是稳定币,则跳过不需要统计
-	if StableCoin[tx.MakerSymbol] && StableCoin[tx.TakerSymbol] {
-		return
-	}
-
 	contract := tx.MakerContract
-	if StableCoin[tx.MakerSymbol] {
+	if IsStableCoin(tx.MakerContract) {
 		contract = tx.TakerContract
 	}
 
@@ -140,22 +135,12 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		err = errors.New("有黑名单")
 		return
 	}
-	if result.IsMintable == "1" {
-		err = errors.New("可增发")
-		return
-	}
-	if result.IsOpenSource == "0" {
-		err = errors.New("合约未开源")
-		return
-	}
+
 	if result.IsWhitelisted == "1" {
 		err = errors.New("包含白名单")
 		return
 	}
-	if result.IsProxy == "1" {
-		err = errors.New("是代理合约")
-		return
-	}
+
 	if result.TransferPausable == "1" {
 		err = errors.New("交易可暂停")
 		return
@@ -175,7 +160,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		return
 	}
 	// 买入税率太高
-	if buyTax >= 10 {
+	if buyTax >= 20 {
 		err = errors.New("买入税率太高")
 		return
 	}
@@ -186,7 +171,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		return
 	}
 	// 卖出税率太高
-	if sellTax >= 10 {
+	if sellTax >= 20 {
 		err = errors.New("卖出税率太高")
 		return
 	}
@@ -197,6 +182,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 	}
 	// 创建者拥有太多的币
 	if createrPercent >= 0.3 {
+		err = errors.New("创建人拥有太多的币")
 		return
 	}
 
@@ -223,7 +209,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		if err != nil {
 			return nil, err
 		}
-		if lp.IsLocked == 1 && lp.IsContract == 1 {
+		if lp.IsLocked == 1 || lp.IsContract == 1 {
 			lpLockPercent += lpPercent
 		}
 		lpTotalPercent += lpPercent
@@ -258,6 +244,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		CreatorPercent:     createrPercent,
 		OwnerAddress:       result.OwnerAddress,
 		OwnerPercent:       ownerPercent,
+		HolderCount:        holderCount,
 		Top10HolderPercent: top10Percent,
 		LPLockPercent:      lpLockPercent,
 		LpOfSupplyPercent:  lpTotalPercent,
@@ -284,22 +271,31 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 	// 放弃所有权
 	if result.CreatorAddress != result.OwnerAddress {
 		Score.Score += 10
-		return
 	}
 	// 合约所有者比率小于50%
 	if ownerPercent <= 0.5 || createrPercent <= 0.5 {
 		Score.Score += 10
-		return
 	}
 	// 买卖税均为0
 	if buyTax == 0 || sellTax == 0 {
 		Score.Score += 10
-		return
 	}
 	// 买卖税大于10
 	if buyTax >= 10 || sellTax >= 10 {
 		Score.Score -= 10
-		return
+	}
+
+	// 可增发
+	if result.IsMintable == "1" {
+		Score.Score -= 10
+	}
+	// 合约未开源
+	if result.IsOpenSource == "0" {
+		Score.Score -= 10
+	}
+	// 代理合约
+	if result.IsProxy == "1" {
+		Score.Score -= 10
 	}
 	return
 }
