@@ -72,9 +72,9 @@ type ContractVerifyScore struct {
 	TotalSupply float64        `gorm:"column:total_supply" json:"total_supply"`
 
 	// 创建人信息
-	CreatorAddress string  `gorm:"column:creator_address" json:"creator_address"`
-	CreatorPercent float64 `gorm:"column:creator_percent" json:"creator_percent"`
-	CreatedDay     string  `gorm:"column:created_day" json:"created_day"`
+	CreatorAddress string     `gorm:"column:creator_address" json:"creator_address"`
+	CreatorPercent float64    `gorm:"column:creator_percent" json:"creator_percent"`
+	CreatedDay     *time.Time `gorm:"column:created_day" json:"created_day"`
 
 	// 合约所有者信息
 	OwnerAddress       string  `gorm:"column:owner_address" json:"owner_address"`

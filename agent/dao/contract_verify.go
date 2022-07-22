@@ -70,63 +70,47 @@ type ContractVerify struct {
 	TokenSymbol          string      `json:"token_symbol"`
 }
 
-func VerifyContract(tx *model.BSCTransaction) (scores []*model.ContractVerifyScore, err error) {
-	if !IsStableCoin(tx.MakerContract) {
-		contract := tx.MakerContract
-		score := new(model.ContractVerifyScore)
-		score, err = GetContractVerifyScore(contract)
-		if err != nil || score.ID > 0 {
-			return
-		}
-
-		url := ContractVerifyUrlPrefix + contract
-		data, err := tools.HttpGet(url)
-		if err != nil {
-			return nil, err
-		}
-
-		var result = new(ContractVerifyResult)
-		err = json.Unmarshal(data, result)
-		if err != nil {
-			return nil, err
-		}
-		score, err = AnalysisContract(contract, result)
-		if err != nil {
-			return nil, err
-		}
-		contract = tx.TakerContract
-		scores = append(scores, score)
+func verifyContract(contract string) (score *model.ContractVerifyScore, err error) {
+	score = new(model.ContractVerifyScore)
+	score, err = GetContractVerifyScore(contract)
+	// 验证合约已经存在或取不到则不用再验证
+	if err != nil || score.ID > 0 {
+		return
 	}
-	if !IsStableCoin(tx.TakerContract) {
-		contract := tx.TakerContract
-		score := new(model.ContractVerifyScore)
-		score, err = GetContractVerifyScore(contract)
-		if err != nil || score.ID > 0 {
-			return
-		}
 
-		url := ContractVerifyUrlPrefix + contract
-		data, err := tools.HttpGet(url)
-		if err != nil {
-			return nil, err
-		}
+	url := ContractVerifyUrlPrefix + contract
+	data, err := tools.HttpGet(url)
+	if err != nil {
+		return
+	}
 
-		var result = new(ContractVerifyResult)
-		err = json.Unmarshal(data, result)
-		if err != nil {
-			return nil, err
-		}
-		score, err = AnalysisContract(contract, result)
-		if err != nil {
-			return nil, err
-		}
-		contract = tx.TakerContract
-		scores = append(scores, score)
+	var result = new(ContractVerifyResult)
+	err = json.Unmarshal(data, result)
+	if err != nil {
+		return
+	}
+	score, err = AnalysisContract(contract, result)
+	if err != nil {
+		return
 	}
 	return
 }
 
-func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *model.ContractVerifyScore, err error) {
+func VerifyContract(tx *model.BSCTransaction) (scores []*model.ContractVerifyScore, err error) {
+	if !IsStableCoin(tx.MakerContract) {
+		if score, err := verifyContract(tx.MakerContract); err == nil {
+			scores = append(scores, score)
+		}
+	}
+	if !IsStableCoin(tx.TakerContract) {
+		if score, err := verifyContract(tx.TakerContract); err == nil {
+			scores = append(scores, score)
+		}
+	}
+	return
+}
+
+func AnalysisContract(contract string, verify *ContractVerifyResult) (score *model.ContractVerifyScore, err error) {
 	// 数据无返回
 	if verify.Message != "OK" || len(verify.Result) == 0 {
 		err = errors.New("未返回数据")
@@ -135,13 +119,15 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 
 	// 获取验证数据
 	var result *ContractVerify
-	for _, value := range verify.Result {
-		if value == nil {
-			err = errors.New("返回数据为nil")
-			return
+	for key, value := range verify.Result {
+		if key == contract && value != nil {
+			result = value
+			break
 		}
-		result = value
-		break
+	}
+	if result == nil {
+		err = errors.New("返回合约验证数据错误")
+		return
 	}
 
 	// 判断不安全项直接返回
@@ -179,10 +165,6 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		err = errors.New("交易可关闭")
 		return
 	}
-	if result.SlippageModifiable == "1" {
-		err = errors.New("可修改费率")
-		return
-	}
 
 	// 买入税率
 	buyTax, err := strconv.ParseFloat(result.BuyTax, 10)
@@ -190,7 +172,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		return
 	}
 	// 买入税率太高
-	if buyTax >= 20 {
+	if buyTax >= 0.2 {
 		err = errors.New("买入税率太高")
 		return
 	}
@@ -201,7 +183,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		return
 	}
 	// 卖出税率太高
-	if sellTax >= 20 {
+	if sellTax >= 0.2 {
 		err = errors.New("卖出税率太高")
 		return
 	}
@@ -216,7 +198,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		return
 	}
 
-	// 持币前10是否超过90%的币，持币太多
+	// 持币前10是否超过99%的币，持币太多
 	var top10Percent float64
 	for _, holder := range result.Holders {
 		percent, err := strconv.ParseFloat(holder.Percent, 10)
@@ -225,8 +207,8 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		}
 		top10Percent += percent
 	}
-	if top10Percent >= 90 {
-		err = errors.New("前10持币超过90%")
+	if top10Percent >= 0.99 {
+		err = errors.New("前10持币超过100%")
 		return
 	}
 
@@ -265,7 +247,7 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 	}
 
 	// 到这里合约才算安全
-	Score = &model.ContractVerifyScore{
+	score = &model.ContractVerifyScore{
 		TokenName:          result.TokenName,
 		TokenSymbol:        result.TokenSymbol,
 		Contract:           contract,
@@ -283,49 +265,55 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (Score *mod
 		Score:              0,
 		Security:           true,
 	}
-	if Score.BuyTax == 0 {
-		Score.Score += 10
+	if score.BuyTax == 0 {
+		score.Score += 10
 	}
-	if Score.SellTax == 0 {
-		Score.Score += 10
+	if score.SellTax == 0 {
+		score.Score += 10
 	}
-	if Score.LPLockPercent >= 0.1 {
-		Score.Score += 10
+	if score.LPLockPercent >= 0.1 {
+		score.Score += 10
 	}
-	if Score.LpOfSupplyPercent >= 0.1 {
-		Score.Score += 10
+	if score.LpOfSupplyPercent >= 0.1 {
+		score.Score += 10
 	}
-	if holderCount <= 1000 {
-		Score.Score += 10
+
+	// 新盘或久经考验的老盘
+	if holderCount <= 1000 || holderCount >= 10000 {
+		score.Score += 20
 	}
 	// 放弃所有权
 	if result.CreatorAddress != result.OwnerAddress {
-		Score.Score += 10
+		score.Score += 10
 	}
 	// 合约所有者比率小于50%
 	if ownerPercent <= 0.5 || createrPercent <= 0.5 {
-		Score.Score += 10
+		score.Score += 10
 	}
 	// 买卖税均为0
 	if buyTax == 0 || sellTax == 0 {
-		Score.Score += 10
+		score.Score += 10
 	}
 	// 买卖税大于10
 	if buyTax >= 10 || sellTax >= 10 {
-		Score.Score -= 10
+		score.Score -= 10
 	}
 
 	// 可增发
 	if result.IsMintable == "1" {
-		Score.Score -= 10
+		score.Score -= 10
 	}
 	// 合约未开源
 	if result.IsOpenSource == "0" {
-		Score.Score -= 10
+		score.Score -= 10
 	}
 	// 代理合约
 	if result.IsProxy == "1" {
-		Score.Score -= 10
+		score.Score -= 10
+	}
+	// 可以修改交易费率
+	if result.SlippageModifiable == "1" {
+		score.Score -= 10
 	}
 	return
 }

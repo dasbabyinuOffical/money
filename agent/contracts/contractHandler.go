@@ -8,7 +8,12 @@ import (
 )
 
 const (
-	PancakeV2Pool = "0x10ed43c718714eb63d5aa57b78b54704e256024e"
+	PancakeV2Pool  = "0x10ed43c718714eb63d5aa57b78b54704e256024e"
+	BscRpcUrl      = "https://bsc-dataseed1.binance.org"
+	BscScanUrl     = "https://api.bscscan.com/api"
+	BscScanAPIKEY  = "FT1ZFNFUJV1GRDKZQB4FXDUYZD31CVAIWE"
+	BscScanAPIKEY2 = "YKYCQAWG45G7NVF8N7NUET1PNN6GC1BZXD"
+	PancakeV2Route = "https://api.pancakeswap.info/api/v2/tokens/"
 )
 
 func NewPancakeV2PoolCaller(url string) (*pancakev2.Pancakev2Caller, error) {

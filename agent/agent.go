@@ -16,14 +16,6 @@ import (
 	"time"
 )
 
-const (
-	BscRpcUrl      = "https://bsc-dataseed1.binance.org"
-	BscScanUrl     = "https://api.bscscan.com/api"
-	BscScanAPIKEY  = "FT1ZFNFUJV1GRDKZQB4FXDUYZD31CVAIWE"
-	Swap           = "Swap (index_topic_1 address sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)"
-	PancakeV2Route = "https://api.pancakeswap.info/api/v2/tokens/"
-)
-
 type Agent struct {
 	PancakeV2Caller *pancakev2.Pancakev2Caller
 	PancakeV2ABI    string
@@ -44,20 +36,20 @@ func NewAgent() (agent *Agent, err error) {
 	agent = new(Agent)
 
 	// 获取bscClient
-	agent.BscClient, err = ethclient.Dial(BscRpcUrl)
+	agent.BscClient, err = ethclient.Dial(contracts.BscRpcUrl)
 	if err != nil {
 		return
 	}
 
 	// 获取pancakeV2Caller
-	agent.PancakeV2Caller, err = contracts.NewPancakeV2PoolCaller(BscRpcUrl)
+	agent.PancakeV2Caller, err = contracts.NewPancakeV2PoolCaller(contracts.BscRpcUrl)
 	if err != nil {
 		return
 	}
 
 	// 获取pancakeV2ABI
 	abiUrl := fmt.Sprintf("%s?module=contract&action=getabi&address=%s&&apikey=%s",
-		BscScanUrl, contracts.PancakeV2Pool, BscScanAPIKEY)
+		contracts.BscScanUrl, contracts.PancakeV2Pool, contracts.BscScanAPIKEY)
 	data, err := tools.HttpGet(abiUrl)
 	if err != nil {
 		return
@@ -89,9 +81,9 @@ func (agent *Agent) ScanLog() (err error) {
 	}
 
 	txUrl := fmt.Sprintf("%s?module=account&action=txlist&sort=asc&apiKey=%s&startblock=%d&endblock=%d&address=%s",
-		BscScanUrl, BscScanAPIKEY, blockNumberInDB.Int64(), blockNumberOnChain.Int64(), contracts.PancakeV2Pool)
+		contracts.BscScanUrl, contracts.BscScanAPIKEY, blockNumberInDB.Int64(), blockNumberOnChain.Int64(), contracts.PancakeV2Pool)
 	// 获取最新区块日志
-	txRecord, err := fetchBlockResults(txUrl)
+	txRecord, err := dao.FetchBlockResults(txUrl)
 	if err != nil || txRecord.Status != "1" || txRecord.Message != "OK" {
 		return
 	}
@@ -115,7 +107,7 @@ func (agent *Agent) ScanLog() (err error) {
 
 		// 分析交易，验证合约安全性
 		scores, err := dao.VerifyContract(record)
-		if err != nil {
+		if err != nil || len(scores) == 0 {
 			fmt.Println("合约不安全:", record.TxId)
 			continue
 		}
@@ -130,7 +122,7 @@ func (agent *Agent) ScanLog() (err error) {
 
 		// 获取合约价格和symbol信息
 		var makerPriceInfo ContractPrice
-		data, err := tools.HttpGet(PancakeV2Route + record.MakerContract)
+		data, err := tools.HttpGet(contracts.PancakeV2Route + record.MakerContract)
 		if err != nil {
 			fmt.Println("获取合约价格失败," + record.MakerContract)
 			continue
@@ -144,7 +136,7 @@ func (agent *Agent) ScanLog() (err error) {
 		record.MakerPrice, _ = strconv.ParseFloat(makerPriceInfo.Data.Price, 10)
 
 		var takerPriceInfo ContractPrice
-		data, err = tools.HttpGet(PancakeV2Route + record.TakerContract)
+		data, err = tools.HttpGet(contracts.PancakeV2Route + record.TakerContract)
 		if err != nil {
 			fmt.Println("获取合约价格失败," + record.TakerContract)
 			continue
@@ -190,7 +182,7 @@ func (agent *Agent) ScanLog() (err error) {
 }
 
 // 处理区块日志
-func (agent *Agent) AnalysisTxRecord(txRecord *Result) (bscTx *model.BSCTransaction, err error) {
+func (agent *Agent) AnalysisTxRecord(txRecord *dao.Result) (bscTx *model.BSCTransaction, err error) {
 	bscTx = new(model.BSCTransaction)
 
 	// 解析交易输入和输出
@@ -223,5 +215,34 @@ func (agent *Agent) AnalysisTxRecord(txRecord *Result) (bscTx *model.BSCTransact
 	bscTx.TxCount += 1
 	bscTx.MakerContract = inputTx.MakerContract
 	bscTx.TakerContract = inputTx.TakerContract
+	return
+}
+
+// 定时更新合约相关信息
+func (agent *Agent) SyncContractInfo() (er error) {
+	// 获取所有未更新合约时间的合约
+	scores, err := dao.GetContractUnCreatedList()
+	if err != nil {
+		return
+	}
+	for _, score := range scores {
+		// 现在api频率
+		time.Sleep(time.Second)
+		// 获取合约创建时间
+		txUrl := fmt.Sprintf("%s?module=account&action=txlist&sort=asc&apiKey=%s&startblock=%d&address=%s",
+			contracts.BscScanUrl, contracts.BscScanAPIKEY2, 0, score.Contract)
+		// 获取最新区块日志
+		txRecord, err := dao.FetchBlockResults(txUrl)
+		if err != nil || txRecord.Status != "1" || txRecord.Message != "OK" || len(txRecord.Result) == 0 {
+			return
+		}
+		ts, err := strconv.ParseInt(txRecord.Result[0].TimeStamp, 10, 64)
+		if err != nil {
+			return
+		}
+		createdDay := time.Unix(ts, 0)
+		score.CreatedDay = &createdDay
+		dao.SaveContractVerifyScore(score)
+	}
 	return
 }

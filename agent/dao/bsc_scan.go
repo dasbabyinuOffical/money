@@ -1,4 +1,4 @@
-package agent
+package dao
 
 import (
 	"encoding/json"
@@ -33,7 +33,7 @@ type TxRecord struct {
 	Result  []*Result `json:"result"`
 }
 
-func fetchBlockResults(url string) (txRecord *TxRecord, err error) {
+func FetchBlockResults(url string) (txRecord *TxRecord, err error) {
 	txRecord = new(TxRecord)
 	respData, err := tools.HttpGet(url)
 	err = json.Unmarshal(respData, txRecord)

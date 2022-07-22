@@ -23,24 +23,13 @@ const (
 )
 
 func SaveBscTransaction(tx *model.BSCTransaction) (err error) {
-	today := time.Now().Format("2006-01-02")
-	tx.Day = today
-	tx.UpdatedAt = time.Now()
-
-	oldTx := new(model.BSCTransaction)
-	DB().Model(tx).
-		Where("maker_contract = ? and taker_contract = ? and day = ?", tx.MakerContract, tx.TakerContract, today).
-		First(oldTx)
 	// 新增
-	if oldTx.ID == 0 {
-		tx.CreatedAt = time.Now()
+	if tx.ID == 0 {
 		err = DB().Create(tx).Error
 		return
 	}
-
 	// 修改
-	tx.TxCount = oldTx.TxCount + 1
-	err = DB().Model(tx).Where("id = ?", oldTx.ID).Updates(tx).Error
+	err = DB().Model(tx).Where("id = ?", tx.ID).Updates(tx).Error
 	return
 }
 
@@ -51,11 +40,10 @@ func TransferToBscHotCoin(tx *model.BSCTransaction) (hotCoins []*model.HotCoin, 
 	if !IsStableCoin(tx.MakerContract) {
 		hotCoin := new(model.HotCoin)
 		hotCoin.Day = time.Date(year, month, day, hour, 0, 0, 0, time.Local)
-		oldHotCoin := new(model.HotCoin)
-		DB().Where("contract = ? and day = ?", tx.MakerContract, hotCoin.Day).First(oldHotCoin)
+		DB().Where("contract = ? and day = ?", tx.MakerContract, hotCoin.Day).First(hotCoin)
 		hotCoin.Symbol = tx.MakerSymbol
 		hotCoin.Contract = tx.MakerContract
-		hotCoin.TxCount = oldHotCoin.TxCount + 1
+		hotCoin.TxCount += 1
 		hotCoin.Price = tx.MakerPrice
 		hotCoins = append(hotCoins, hotCoin)
 	}
@@ -63,11 +51,10 @@ func TransferToBscHotCoin(tx *model.BSCTransaction) (hotCoins []*model.HotCoin, 
 	if !IsStableCoin(tx.TakerContract) {
 		hotCoin := new(model.HotCoin)
 		hotCoin.Day = time.Date(year, month, day, hour, 0, 0, 0, time.Local)
-		oldHotCoin := new(model.HotCoin)
-		DB().Where("contract = ? and day = ?", tx.TakerContract, hotCoin.Day).First(oldHotCoin)
+		DB().Where("contract = ? and day = ?", tx.TakerContract, hotCoin.Day).First(hotCoin)
 		hotCoin.Symbol = tx.TakerSymbol
 		hotCoin.Contract = tx.TakerContract
-		hotCoin.TxCount = oldHotCoin.TxCount + 1
+		hotCoin.TxCount += 1
 		hotCoin.Price = tx.TakerPrice
 		hotCoins = append(hotCoins, hotCoin)
 	}
@@ -99,9 +86,25 @@ func GetBscHotTransactionFromDB() (hotCoinList []*model.HotCoin, err error) {
 	return
 }
 
+func GetNewBscCoin() (newCoinList []*model.ContractVerifyScore, err error) {
+	err = DB().
+		Where("created_day >= ?", time.Now().AddDate(0, -1, 0)).
+		Order("created_day desc,score desc").
+		Find(&newCoinList).Error
+	return
+}
+
 func GetContractVerifyScore(contract string) (score *model.ContractVerifyScore, err error) {
 	score = new(model.ContractVerifyScore)
 	err = DB().Where("contract = ?", contract).First(score).Error
+	if err == gorm.ErrRecordNotFound {
+		err = nil
+	}
+	return
+}
+
+func GetContractUnCreatedList() (scoreList []*model.ContractVerifyScore, err error) {
+	err = DB().Where("created_day is NULL").Find(&scoreList).Error
 	if err == gorm.ErrRecordNotFound {
 		err = nil
 	}
