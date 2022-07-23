@@ -88,8 +88,8 @@ func GetBscHotTransactionFromDB() (hotCoinList []*model.HotCoin, err error) {
 
 func GetNewBscCoin() (newCoinList []*model.ContractVerifyScore, err error) {
 	err = DB().
-		Where("created_day >= ?", time.Now().AddDate(0, -1, 0)).
-		Order("created_day desc,score desc").
+		Where("created_day >= ?", time.Now().AddDate(0, 0, -7)).
+		Order("score desc ,created_day desc").
 		Find(&newCoinList).Error
 	return
 }

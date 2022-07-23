@@ -16,7 +16,7 @@ func Loop(bscAgent *agent.Agent) {
 
 func SyncContractTask(bscAgent *agent.Agent) {
 	for {
-		time.Sleep(time.Second * 10)
+		time.Sleep(100 * time.Millisecond)
 		err := bscAgent.SyncContractInfo()
 		if err != nil {
 			fmt.Println("SyncContractInfo,err:", err)

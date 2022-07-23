@@ -12,7 +12,10 @@ import (
 )
 
 const (
-	swapExactETHForTokens = "swapExactETHForTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline)"
+	swapExactETHForTokens                                 = "swapExactETHForTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline)"
+	swapExactTokensForETH                                 = "swapExactTokensForETH(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)"
+	swapExactTokensForTokens                              = "swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)"
+	swapExactTokensForTokensSupportingFeeOnTransferTokens = "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)"
 )
 
 type InputTx struct {
@@ -35,10 +38,49 @@ type SwapExactETHForTokensDecoder struct {
 	}
 }
 
+type SwapExactTokensForETHDecoder struct {
+	Decoder
+	FunctionInputs struct {
+		AmountIn     *big.Int
+		AmountOutMin *big.Int
+		Path         []common.Address
+		To           common.Address
+		Deadline     *big.Int
+	}
+}
+
+type SwapExactTokensForTokensDecoder struct {
+	Decoder
+	FunctionInputs struct {
+		AmountIn     *big.Int
+		AmountOutMin *big.Int
+		Path         []common.Address
+		To           common.Address
+		Deadline     *big.Int
+	}
+}
+
+type SwapExactTokensForTokensSupportingFeeOnTransferTokensDecoder struct {
+	Decoder
+	FunctionInputs struct {
+		AmountIn     *big.Int
+		AmountOutMin *big.Int
+		Path         []common.Address
+		To           common.Address
+		Deadline     *big.Int
+	}
+}
+
 func NewBscInputDecoder(funcName string) (decoder Decoder, err error) {
 	switch funcName {
 	case swapExactETHForTokens:
-		decoder = &SwapExactETHForTokensDecoder{}
+		decoder = new(SwapExactETHForTokensDecoder)
+	case swapExactTokensForETH:
+		decoder = new(SwapExactTokensForETHDecoder)
+	case swapExactTokensForTokens:
+		decoder = new(SwapExactTokensForTokensDecoder)
+	case swapExactTokensForTokensSupportingFeeOnTransferTokens:
+		decoder = new(SwapExactTokensForTokensSupportingFeeOnTransferTokensDecoder)
 	default:
 		err = errors.New("unsupport input decoder")
 	}
@@ -46,6 +88,126 @@ func NewBscInputDecoder(funcName string) (decoder Decoder, err error) {
 }
 
 func (decoder *SwapExactETHForTokensDecoder) DecodeInput(input string) (inputTx *InputTx, err error) {
+	inputTx = new(InputTx)
+	abiContent := contracts.GetPancakeV2ABI()
+	abi, err := abi.JSON(strings.NewReader(abiContent))
+	if err != nil {
+		return
+	}
+
+	decodedSig, err := hex.DecodeString(input[2:10])
+	method, err := abi.MethodById(decodedSig)
+	if err != nil {
+		return
+	}
+
+	inputMap := make(map[string]interface{}, 0)
+	data, err := hex.DecodeString(input[10:])
+	if err != nil {
+		return
+	}
+
+	err = method.Inputs.UnpackIntoMap(inputMap, data)
+	if err != nil {
+		return
+	}
+
+	err = mapstructure.Decode(inputMap, &decoder.FunctionInputs)
+	if err != nil {
+		return
+	}
+	path := decoder.FunctionInputs.Path
+	if len(path) < 2 {
+		err = errors.New("input path length error")
+		return
+	}
+
+	inputTx.MakerContract = path[0].Hex()
+	inputTx.TakerContract = path[len(path)-1].Hex()
+	return
+}
+
+func (decoder *SwapExactTokensForETHDecoder) DecodeInput(input string) (inputTx *InputTx, err error) {
+	inputTx = new(InputTx)
+	abiContent := contracts.GetPancakeV2ABI()
+	abi, err := abi.JSON(strings.NewReader(abiContent))
+	if err != nil {
+		return
+	}
+
+	decodedSig, err := hex.DecodeString(input[2:10])
+	method, err := abi.MethodById(decodedSig)
+	if err != nil {
+		return
+	}
+
+	inputMap := make(map[string]interface{}, 0)
+	data, err := hex.DecodeString(input[10:])
+	if err != nil {
+		return
+	}
+
+	err = method.Inputs.UnpackIntoMap(inputMap, data)
+	if err != nil {
+		return
+	}
+
+	err = mapstructure.Decode(inputMap, &decoder.FunctionInputs)
+	if err != nil {
+		return
+	}
+	path := decoder.FunctionInputs.Path
+	if len(path) < 2 {
+		err = errors.New("input path length error")
+		return
+	}
+
+	inputTx.MakerContract = path[0].Hex()
+	inputTx.TakerContract = path[len(path)-1].Hex()
+	return
+}
+
+func (decoder *SwapExactTokensForTokensDecoder) DecodeInput(input string) (inputTx *InputTx, err error) {
+	inputTx = new(InputTx)
+	abiContent := contracts.GetPancakeV2ABI()
+	abi, err := abi.JSON(strings.NewReader(abiContent))
+	if err != nil {
+		return
+	}
+
+	decodedSig, err := hex.DecodeString(input[2:10])
+	method, err := abi.MethodById(decodedSig)
+	if err != nil {
+		return
+	}
+
+	inputMap := make(map[string]interface{}, 0)
+	data, err := hex.DecodeString(input[10:])
+	if err != nil {
+		return
+	}
+
+	err = method.Inputs.UnpackIntoMap(inputMap, data)
+	if err != nil {
+		return
+	}
+
+	err = mapstructure.Decode(inputMap, &decoder.FunctionInputs)
+	if err != nil {
+		return
+	}
+	path := decoder.FunctionInputs.Path
+	if len(path) < 2 {
+		err = errors.New("input path length error")
+		return
+	}
+
+	inputTx.MakerContract = path[0].Hex()
+	inputTx.TakerContract = path[len(path)-1].Hex()
+	return
+}
+
+func (decoder *SwapExactTokensForTokensSupportingFeeOnTransferTokensDecoder) DecodeInput(input string) (inputTx *InputTx, err error) {
 	inputTx = new(InputTx)
 	abiContent := contracts.GetPancakeV2ABI()
 	abi, err := abi.JSON(strings.NewReader(abiContent))

@@ -229,7 +229,7 @@ func (agent *Agent) SyncContractInfo() (er error) {
 		// 现在api频率
 		time.Sleep(time.Second)
 		// 获取合约创建时间
-		txUrl := fmt.Sprintf("%s?module=account&action=txlist&sort=asc&apiKey=%s&startblock=%d&address=%s",
+		txUrl := fmt.Sprintf("%s?module=account&action=txlist&sort=asc&apiKey=%s&startblock=%d&page=1&offset=1&address=%s",
 			contracts.BscScanUrl, contracts.BscScanAPIKEY2, 0, score.Contract)
 		// 获取最新区块日志
 		txRecord, err := dao.FetchBlockResults(txUrl)
