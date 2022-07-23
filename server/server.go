@@ -47,5 +47,5 @@ func Serve() {
 	http.HandleFunc("/bsc/latest", BscLatestTransaction)
 	http.HandleFunc("/bsc/hot", BscHotTransaction)
 	http.HandleFunc("/bsc/new", BscNewCoin)
-	http.ListenAndServe(":80", nil)
+	http.ListenAndServe(":8080", nil)
 }

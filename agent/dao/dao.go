@@ -81,6 +81,7 @@ func GetBscLatestTransactionFromDB() (txList []*model.BSCTransaction, err error)
 func GetBscHotTransactionFromDB() (hotCoinList []*model.HotCoin, err error) {
 	err = DB().
 		Where("updated_at >= ?", time.Now().Add(-24*time.Hour)).
+		Limit(100).
 		Order("tx_count desc,updated_at desc").
 		Find(&hotCoinList).Error
 	return

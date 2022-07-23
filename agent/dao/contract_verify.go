@@ -231,10 +231,6 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 		}
 		lpTotalPercent += lpPercent
 	}
-	if lpLockPercent <= 0 {
-		err = errors.New("池子未锁")
-		return
-	}
 
 	ownerPercent, err := strconv.ParseFloat(result.OwnerPercent, 10)
 	if err != nil {
@@ -318,6 +314,10 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 	}
 	// 可以修改交易费率
 	if result.SlippageModifiable == "1" {
+		score.Score -= 10
+	}
+	// 池子未锁
+	if lpLockPercent <= 0 {
 		score.Score -= 10
 	}
 	return
