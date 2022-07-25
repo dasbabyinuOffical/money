@@ -99,12 +99,12 @@ func verifyContract(contract string) (score *model.ContractVerifyScore, err erro
 
 func VerifyContract(tx *model.BSCTransaction) (scores []*model.ContractVerifyScore, err error) {
 	if !IsStableCoin(tx.MakerContract) {
-		if score, err := verifyContract(tx.MakerContract); err == nil {
+		if score, err := verifyContract(tx.MakerContract); err == nil && score.Security {
 			scores = append(scores, score)
 		}
 	}
 	if !IsStableCoin(tx.TakerContract) {
-		if score, err := verifyContract(tx.TakerContract); err == nil {
+		if score, err := verifyContract(tx.TakerContract); err == nil && score.Security {
 			scores = append(scores, score)
 		}
 	}
@@ -212,24 +212,9 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 		}
 		top10Percent += percent
 	}
-	if top10Percent >= 0.99 {
+	if top10Percent >= 0.95 {
 		err = errors.New("前10持币超过100%")
 		return
-	}
-
-	var (
-		lpLockPercent  float64
-		lpTotalPercent float64
-	)
-	for _, lp := range result.LpHolders {
-		lpPercent, err := strconv.ParseFloat(lp.Percent, 10)
-		if err != nil {
-			return nil, err
-		}
-		if lp.IsLocked == 1 || lp.IsContract == 1 {
-			lpLockPercent += lpPercent
-		}
-		lpTotalPercent += lpPercent
 	}
 
 	ownerPercent, err := strconv.ParseFloat(result.OwnerPercent, 10)
@@ -244,6 +229,30 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 	}
 	holderCount, err := strconv.ParseInt(result.HolderCount, 10, 64)
 	if err != nil {
+		return
+	}
+
+	var (
+		lpLockPercent  float64
+		lpTotalPercent float64
+	)
+	const (
+		Dead1 = "0x0000000000000000000000000000000000000000"
+		Dead2 = "0x000000000000000000000000000000000000dead"
+	)
+	for _, lp := range result.LpHolders {
+		lpPercent, err := strconv.ParseFloat(lp.Percent, 10)
+		if err != nil {
+			return nil, err
+		}
+		if lp.IsLocked == 1 && (lp.IsContract == 1 || lp.Address == Dead1 || lp.Address == Dead2) {
+			lpLockPercent += lpPercent
+		}
+		lpTotalPercent += lpPercent
+	}
+	// 一半的池子未锁跳过
+	if lpLockPercent < 0.5 {
+		err = errors.New("池子未锁")
 		return
 	}
 
@@ -314,10 +323,6 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 	}
 	// 可以修改交易费率
 	if result.SlippageModifiable == "1" {
-		score.Score -= 10
-	}
-	// 池子未锁
-	if lpLockPercent <= 0 {
 		score.Score -= 10
 	}
 	return

@@ -88,9 +88,14 @@ func GetBscHotTransactionFromDB() (hotCoinList []*model.HotCoin, err error) {
 }
 
 func GetNewBscCoin() (newCoinList []*model.ContractVerifyScore, err error) {
+	deadAddress := []string{
+		"0x0000000000000000000000000000000000000000",
+		"0x000000000000000000000000000000000000dead",
+	}
 	err = DB().
-		Where("created_day >= ?", time.Now().AddDate(0, 0, -7)).
-		Order("score desc ,created_day desc").
+		Where("owner_address in (?)", deadAddress).
+		Where("security = true").
+		Order("created_day desc,score desc").
 		Find(&newCoinList).Error
 	return
 }
