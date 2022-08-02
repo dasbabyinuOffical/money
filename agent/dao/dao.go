@@ -152,3 +152,14 @@ func IsStableCoin(contract string) bool {
 	_, ok := StableCoin[strings.ToLower(contract)]
 	return ok
 }
+
+func QueryBscCoin(search string) (coinList []*model.ContractVerifyScore, err error) {
+	coinList = make([]*model.ContractVerifyScore, 0)
+	databasse := DB().Where("security = true")
+	if search != "" {
+		search += "%"
+		databasse = databasse.Where("token_name like ?  or token_symbol like ? or contract like ?", search, search, search)
+	}
+	err = databasse.Order("created_day desc,score desc").Find(&coinList).Error
+	return
+}

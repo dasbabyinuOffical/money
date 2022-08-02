@@ -256,6 +256,27 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 		return
 	}
 
+	// 可增发
+	if result.IsMintable == "1" {
+		err = errors.New("可增发")
+		return
+	}
+	// 合约未开源
+	if result.IsOpenSource == "0" {
+		err = errors.New("合约未开源")
+		return
+	}
+	// 代理合约
+	if result.IsProxy == "1" {
+		err = errors.New("是代理合约")
+		return
+	}
+	// 可以修改交易费率
+	if result.SlippageModifiable == "1" {
+		err = errors.New("可以修改交易费率")
+		return
+	}
+
 	// 到这里合约才算安全
 	score = &model.ContractVerifyScore{
 		TokenName:          result.TokenName,
@@ -306,23 +327,6 @@ func AnalysisContract(contract string, verify *ContractVerifyResult) (score *mod
 	}
 	// 买卖税大于10
 	if buyTax >= 10 || sellTax >= 10 {
-		score.Score -= 10
-	}
-
-	// 可增发
-	if result.IsMintable == "1" {
-		score.Score -= 10
-	}
-	// 合约未开源
-	if result.IsOpenSource == "0" {
-		score.Score -= 10
-	}
-	// 代理合约
-	if result.IsProxy == "1" {
-		score.Score -= 10
-	}
-	// 可以修改交易费率
-	if result.SlippageModifiable == "1" {
 		score.Score -= 10
 	}
 	return

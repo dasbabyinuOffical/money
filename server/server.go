@@ -43,9 +43,22 @@ func BscNewCoin(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(ret))
 }
 
+func BscQueryCoin(w http.ResponseWriter, r *http.Request) {
+	setCOROS(w)
+
+	values := r.URL.Query()
+	search := values.Get("search")
+
+	data, _ := dao.QueryBscCoin(search)
+	ret, _ := json.Marshal(data)
+
+	fmt.Fprintf(w, string(ret))
+}
+
 func Serve() {
 	http.HandleFunc("/bsc/latest", BscLatestTransaction)
 	http.HandleFunc("/bsc/hot", BscHotTransaction)
 	http.HandleFunc("/bsc/new", BscNewCoin)
+	http.HandleFunc("/bsc/query", BscQueryCoin)
 	http.ListenAndServe(":8080", nil)
 }
